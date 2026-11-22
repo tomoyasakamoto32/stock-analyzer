@@ -5,6 +5,8 @@
   "tsconfig": "./tsconfig.server.json",
   "compatibility_date": "2026-11-22",
   "observability": { "enabled": true },
+  // プレビューURL(<version>-<name>.<subdomain>.workers.dev)を作らない。Accessで保護していない経路を増やさない。
+  "preview_urls": false,
   "d1_databases": [
     {
       "binding": "DB",
@@ -25,7 +27,7 @@
     "DATA_SOURCE": "mock",
     "ALLOW_EXTERNAL_AI_DATA": "false",
     "ALLOW_PERSIST_SOURCE_DATA": "false",
-    "DAILY_ANALYSIS_LIMIT": "5",
+    "DAILY_ANALYSIS_LIMIT": "unlimited",
     "OPENAI_MAX_OUTPUT_TOKENS": "8000",
     "MAX_INPUT_CHARS": "90000",
     "ALLOW_WEB_SEARCH": "false"

@@ -1,3 +1,5 @@
+import { parseDailyLimit } from './services/analysis/cost.ts'
+
 export interface Env {
   DB: D1Database
   ASSETS: Fetcher
@@ -31,7 +33,8 @@ export type AppConfig = {
   webSearchEnabled: boolean
   /** 決算短信PDFをAIで要約して分析に加える。実AIモードで、ENABLE_TANSHIN_PDF=false でなければ有効 */
   tanshinPdfEnabled: boolean
-  dailyLimit: number
+  /** 1日の実行回数の上限。null は無制限(OpenAI側の利用上限などで管理する場合) */
+  dailyLimit: number | null
   monthlyCostLimitUsd: number | null
   maxOutputTokens: number
   maxInputChars: number
@@ -57,7 +60,7 @@ export function loadConfig(env: Env): AppConfig {
     persistSnapshot: bool(env.ALLOW_PERSIST_SOURCE_DATA),
     webSearchEnabled: aiMode === 'real' && bool(env.ALLOW_WEB_SEARCH),
     tanshinPdfEnabled: aiMode === 'real' && env.ENABLE_TANSHIN_PDF?.trim().toLowerCase() !== 'false',
-    dailyLimit: num(env.DAILY_ANALYSIS_LIMIT) ?? 5,
+    dailyLimit: parseDailyLimit(env.DAILY_ANALYSIS_LIMIT),
     monthlyCostLimitUsd: num(env.MONTHLY_COST_LIMIT_USD),
     maxOutputTokens: num(env.OPENAI_MAX_OUTPUT_TOKENS) ?? 8000,
     maxInputChars: num(env.MAX_INPUT_CHARS) ?? 90000,

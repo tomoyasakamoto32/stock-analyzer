@@ -8,6 +8,9 @@ type Certs = { keys: Jwk[] }
 
 const CERTS_TTL_MS = 60 * 60 * 1000
 const certCache = new Map<string, { at: number; certs: Certs }>()
+/** 未知の kid を理由にした鍵の強制再取得は、この間隔に1回まで(認証前のリクエストで外部取得を増幅させない) */
+const FORCE_REFRESH_MIN_INTERVAL_MS = 60_000
+const lastForced = new Map<string, number>()
 
 export function normalizeTeamDomain(raw: string): string {
   const d = raw.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '')
@@ -42,6 +45,22 @@ async function getCerts(teamDomain: string, fetchImpl: typeof fetch, force = fal
 
 export function clearCertCache() {
   certCache.clear()
+  lastForced.clear()
+}
+
+/**
+ * Access設定の検査。OWNER_EMAIL が未設定だと、Accessの許可リスト内の別の人・サービストークンも通ってしまうため、
+ * 本アプリ(所有者1人)では必須にして fail-closed にする。問題が無ければ null。
+ */
+export function accessConfigProblem(cfg: { teamDomain?: string; aud?: string; ownerEmail?: string }): string | null {
+  if (!cfg.teamDomain || !cfg.aud) return 'CLOUDFLARE_ACCESS_TEAM_DOMAIN と CLOUDFLARE_ACCESS_AUD が未設定です'
+  if (!cfg.ownerEmail || !cfg.ownerEmail.trim()) return 'OWNER_EMAIL が未設定です(所有者のメールアドレスを設定してください)'
+  return null
+}
+
+/** ローカル開発専用の認証迂回: フラグが true で、かつ localhost へのアクセスの時だけ有効。 */
+export function bypassAllowed(flag: string | undefined, host: string): boolean {
+  return flag?.trim().toLowerCase() === 'true' && /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host)
 }
 
 export async function verifyAccessJwt(
@@ -64,7 +83,14 @@ export async function verifyAccessJwt(
   let certs: Certs
   try {
     certs = await getCerts(teamDomain, fetchImpl)
-    if (header.kid && !certs.keys.some((k) => k.kid === header.kid)) certs = await getCerts(teamDomain, fetchImpl, true) // 鍵ローテーション
+    if (header.kid && !certs.keys.some((k) => k.kid === header.kid)) {
+      // 鍵ローテーションに備えて再取得するが、頻度は制限する(偽のkidを大量に送られても外部取得を増やさない)
+      const last = lastForced.get(teamDomain) ?? 0
+      if (Date.now() - last >= FORCE_REFRESH_MIN_INTERVAL_MS) {
+        lastForced.set(teamDomain, Date.now())
+        certs = await getCerts(teamDomain, fetchImpl, true)
+      }
+    }
   } catch {
     return { ok: false, reason: 'certs_unavailable' }
   }

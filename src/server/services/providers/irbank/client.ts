@@ -61,6 +61,8 @@ export class IrbankClient {
         res = await this.fetchImpl(url, {
           headers: { Authorization: `Bearer ${this.apiKey}`, Accept: mode === 'bytes' ? 'application/pdf' : 'application/json' },
           signal: AbortSignal.timeout(TIMEOUT_MS),
+          // APIキーを付けるため、リダイレクト先へは自動で送らない(3xxは予期しないステータスとして失敗させる)
+          redirect: 'manual',
         })
       } catch (e) {
         if (attempt < MAX_RETRIES) {

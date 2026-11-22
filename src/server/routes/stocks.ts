@@ -4,6 +4,7 @@ import { loadConfig } from '../env.ts'
 import { makeProvider } from '../services/analysis/orchestrate.ts'
 import * as master from '../db/repositories/securities.ts'
 import { AnalysisError } from '../services/analysis/errors.ts'
+import { declaredBodyTooLarge } from '../../shared/validate.ts'
 
 const err = (code: string, message: string) => ({ error: { code, message } })
 
@@ -46,9 +47,12 @@ stocks.post('/master/refresh', async (c) => {
   if (!cfg.persistSnapshot && cfg.dataSource !== 'mock') {
     return c.json(err('persist_not_allowed', '銘柄マスタの保存には ALLOW_PERSIST_SOURCE_DATA=true が必要です(利用条件の確認後に有効化してください)'), 403)
   }
+  if (declaredBodyTooLarge(c.req.header('Content-Length'), 2048)) return c.json(err('payload_too_large', 'リクエストが大きすぎます'), 413)
   let cursor: string | undefined
   try {
-    const body = JSON.parse((await c.req.text()) || '{}') as { cursor?: unknown }
+    const text = await c.req.text()
+    if (text.length > 2048) return c.json(err('payload_too_large', 'リクエストが大きすぎます'), 413)
+    const body = JSON.parse(text || '{}') as { cursor?: unknown }
     if (body.cursor != null) {
       if (typeof body.cursor !== 'string' || !CURSOR.test(body.cursor)) return c.json(err('invalid_cursor', 'cursor が不正です'), 400)
       cursor = body.cursor

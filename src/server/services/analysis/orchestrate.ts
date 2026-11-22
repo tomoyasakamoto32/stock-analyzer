@@ -10,7 +10,7 @@ import { SCHEMA_VERSION } from './schema.ts'
 import { callOpenAI, type AiResult } from './openai.ts'
 import { mockAnalysis } from './mock-ai.ts'
 import { checkOutput } from './output-check.ts'
-import { estimateCost } from './cost.ts'
+import { costLimitProblem, estimateCost } from './cost.ts'
 import { AnalysisError } from './errors.ts'
 import { callResearch, researchInput, researchToEvidence } from './web-research.ts'
 import { MAX_PDF_BYTES, summarizeTanshinPdf, tanshinToEvidence } from './tanshin-pdf.ts'
@@ -27,7 +27,7 @@ export function makeProvider(env: Env, cfg: AppConfig): MarketDataProvider {
 
 export type StartResult =
   | { kind: 'existing'; run: RunSummary }
-  | { kind: 'rejected'; code: 'daily_limit' | 'monthly_cost_limit'; message: string }
+  | { kind: 'rejected'; code: 'daily_limit' | 'monthly_cost_limit' | 'cost_config'; message: string }
   | { kind: 'created'; id: string }
 
 /** 上限チェックと run 作成(一意制約で二重課金を防ぐ)。 */
@@ -40,7 +40,9 @@ export async function startRun(
   const existing = await runs.findByKey(db, p.key)
   if (existing) return { kind: 'existing', run: existing }
 
-  if ((await runs.countToday(db)) >= cfg.dailyLimit) {
+  const problem = cfg.aiMode === 'real' ? costLimitProblem(cfg) : null
+  if (problem) return { kind: 'rejected', code: 'cost_config', message: problem }
+  if (cfg.dailyLimit != null && (await runs.countToday(db)) >= cfg.dailyLimit) {
     return { kind: 'rejected', code: 'daily_limit', message: `本日の分析回数の上限(${cfg.dailyLimit}回)に達しました` }
   }
   if (cfg.monthlyCostLimitUsd != null && (await runs.monthCostUsd(db)) >= cfg.monthlyCostLimitUsd) {

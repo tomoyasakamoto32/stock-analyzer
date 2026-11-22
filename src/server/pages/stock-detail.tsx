@@ -33,7 +33,7 @@ export function StockDetail(props: {
       <ModeNotice cfg={props.cfg} />
       <section class="card">
         <h2>再分析</h2>
-        <div id="analysis-controls" data-code={props.code} data-daily-limit={String(props.cfg.dailyLimit)} data-web-search={props.cfg.webSearchEnabled ? '1' : undefined}>
+        <div id="analysis-controls" data-code={props.code} data-daily-limit={props.cfg.dailyLimit == null ? undefined : String(props.cfg.dailyLimit)} data-web-search={props.cfg.webSearchEnabled ? '1' : undefined}>
           <p class="muted">読み込み中…(JavaScriptが必要です)</p>
         </div>
         <p class="muted small">再分析は新しいレポートとして保存されます(過去分は上書きされません)。</p>

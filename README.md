@@ -49,7 +49,7 @@ npm run dev                            # クライアントをビルドして wr
 4. Access: セルフホストアプリを作成し、ポリシーは**自分のメールのみ**許可。`workers.dev` と プレビューURL も同じアプリで保護(または無効化)。
 5. Secrets(`wrangler secret put <NAME>`): `IRBANK_API_KEY` `OPENAI_API_KEY` `OPENAI_MODEL` `CLOUDFLARE_ACCESS_TEAM_DOMAIN` `CLOUDFLARE_ACCESS_AUD` `OWNER_EMAIL`。
 6. 変数: `DATA_SOURCE=irbank`、`ALLOW_EXTERNAL_AI_DATA=true`(AI送信の許可)。スナップショット保存を許す場合のみ `ALLOW_PERSIST_SOURCE_DATA=true`。
-7. 費用: `OPENAI_PRICE_INPUT_PER_MTOK` / `OPENAI_PRICE_OUTPUT_PER_MTOK`(公式料金で確認した単価)、`DAILY_ANALYSIS_LIMIT`、`MONTHLY_COST_LIMIT_USD`。
+7. 費用: `OPENAI_PRICE_INPUT_PER_MTOK` / `OPENAI_PRICE_OUTPUT_PER_MTOK`(公式料金で確認した単価)、`DAILY_ANALYSIS_LIMIT`(数値で上限、`unlimited` で無制限)、`MONTHLY_COST_LIMIT_USD`。
 8. `npm run deploy`。
 
 ## 設計上の判断(仕様の解釈)
@@ -103,10 +103,32 @@ npm run dev                            # クライアントをビルドして wr
 
 ## セキュリティ
 
-- シークレットはブラウザJSに出ない(Worker のみ)。ログにキー/本文を出さない。
-- CSP(`script-src 'self'` 等)・`X-Content-Type-Options`・`X-Frame-Options`・`Referrer-Policy`。変更系APIは同一オリジン+`application/json` のみ(CSRF対策)。
-- AI出力は JSX のテキストとして描画(HTMLとして解釈しない)。SQL は prepared statement のみ。
-- `npm audit --omit=dev` を定期実行。新規依存を追加する場合は必要性・維持状況・推移的依存をここに記録。
+**認証・認可**
+- Cloudflare Access の署名済みJWT(RS256・iss・aud・exp・nbf・本人のメール)を全経路(ページ・API・静的アセット・PDF中継)で検証。設定が不足していれば fail-closed(503)。**`OWNER_EMAIL` は必須**(未設定だと許可リスト内の他の人も通ってしまうため)。
+- `DEV_AUTH_BYPASS=true` は **localhost へのアクセスの時だけ**有効(他のホスト名・偽装では無効)。**本番(Secrets/vars)には絶対に設定しない**。
+- 未知の `kid` のトークンを大量に送られても、Accessの鍵の再取得は60秒に1回まで。
+- `workers.dev` と プレビューURL も Access の対象にするか、無効にする(`wrangler.jsonc` で `preview_urls: false`)。
+
+**入力・出力**
+- 変更系APIは同一オリジン + `application/json` のみ(CSRF)。ボディは Content-Length の時点で上限を超えれば読み込まず 413。PDF中継(GET)は同一サイトからの操作に限る(他サイトの画像タグ等でデータ提供元の無料枠を消費させない)。
+- SQL は prepared statement のみ(動的に組み立てるのはプレースホルダ番号だけ)。LIKE は特殊文字をエスケープし、D1の50バイト制限に収める。
+- AI出力・Web検索結果・開示文書の抜粋はすべて JSX のテキストとして描画(HTMLとして解釈しない)。外部リンクは `https` のみ、`rel="noopener noreferrer nofollow"`。Web検索の出典URLは、検索で実際に引用されたURLと一致するものだけ採用。
+- セキュリティヘッダー: CSP(`script-src 'self'` ほか)、HSTS、`X-Content-Type-Options`、`X-Frame-Options`/`frame-ancestors`、COOP/CORP、`Referrer-Policy`、`Permissions-Policy`、`Cache-Control: no-store`。
+
+**秘密情報・外部通信**
+- APIキーは Worker 内のみ(ブラウザに出ない)。ログには理由コードのみで、キー・本文・個人情報は出さない。
+- APIキーを付けるリクエストは、リダイレクトを自動追従しない。PDFの取得先はデータ提供元のファイル配信URLに限定し、中継できるのは保存済みの分析で使った文書IDだけ。
+
+**費用の暴走防止**
+- 1日の実行回数上限。`MONTHLY_COST_LIMIT_USD` を設定する場合は `OPENAI_PRICE_INPUT_PER_MTOK`/`OPENAI_PRICE_OUTPUT_PER_MTOK` も必須(単価が無いと費用が計算できず上限が効かないため、未設定なら実行を拒否)。Web検索のツール利用料は推定費用に含まれない点に注意。
+
+**依存関係**
+- 直接依存はすべて正確なバージョンに固定(`.npmrc` の `save-exact=true`)。CI・デプロイでは `npm ci`。`npm audit` を定期実行。インストール時スクリプトを持つのは `esbuild`・`fsevents`・`workerd`。
+
+**既知の制約(低リスク・要認識)**
+- 1日の実行回数上限は、同時リクエストでは1〜2回超えうる(個人利用では実害は小さい)。
+- 古い実行の失敗化(`markStaleRuns`)をページ表示のたびに実行しており、履歴が非常に増えると読み取り行数が増える(D1の無料枠に注意)。
+- Web検索の出典リンクは、検索で引用されたURLであることは検証するが、リンク先サイト自体の安全性は検証できない。
 
 ## ディレクトリ
 

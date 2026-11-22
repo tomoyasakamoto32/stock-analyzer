@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../env.ts'
 import { loadConfig } from '../env.ts'
-import { isUuid, normalizeStockCode, parseInvestmentStyle } from '../../shared/validate.ts'
+import { declaredBodyTooLarge, isUuid, normalizeStockCode, parseInvestmentStyle } from '../../shared/validate.ts'
 import { executeRun, startRun } from '../services/analysis/orchestrate.ts'
 import * as runs from '../db/repositories/runs.ts'
 import { parseOverall, parseSection } from '../services/analysis/stored.ts'
@@ -32,6 +32,7 @@ analyses.post('/', async (c) => {
   const key = c.req.header('Idempotency-Key')
   if (!isUuid(key)) return c.json(err('invalid_idempotency_key', 'Idempotency-Key(UUID)が必要です'), 400)
 
+  if (declaredBodyTooLarge(c.req.header('Content-Length'), MAX_BODY_BYTES)) return c.json(err('payload_too_large', 'リクエストが大きすぎます'), 413)
   const text = await c.req.text()
   if (text.length > MAX_BODY_BYTES) return c.json(err('payload_too_large', 'リクエストが大きすぎます'), 413)
   let body: unknown

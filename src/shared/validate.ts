@@ -16,3 +16,10 @@ export function parseInvestmentStyle(input: unknown): InvestmentStyle | null {
 export function isUuid(v: unknown): v is string {
   return typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
 }
+
+/** Content-Length が上限を超えるか(本文を読み込む前の検査)。ヘッダーが無い/不正なら false(読んだ後の検査に任せる)。 */
+export function declaredBodyTooLarge(contentLength: string | undefined | null, maxBytes: number): boolean {
+  if (!contentLength) return false
+  const n = Number(contentLength)
+  return Number.isFinite(n) && n > maxBytes
+}

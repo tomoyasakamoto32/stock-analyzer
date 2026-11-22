@@ -81,11 +81,11 @@ export function Dashboard(props: { runs: RunSummary[]; names: Map<string, string
       <h1>銘柄を分析する</h1>
       <ModeNotice cfg={props.cfg} />
       <section class="card">
-        <div id="analysis-controls" data-daily-limit={String(props.cfg.dailyLimit)} data-web-search={props.cfg.webSearchEnabled ? '1' : undefined}>
+        <div id="analysis-controls" data-daily-limit={props.cfg.dailyLimit == null ? undefined : String(props.cfg.dailyLimit)} data-web-search={props.cfg.webSearchEnabled ? '1' : undefined}>
           <p class="muted">読み込み中…(JavaScriptが必要です)</p>
         </div>
         <p class="muted small">
-          本日の実行: {props.todayCount} / {props.cfg.dailyLimit} 回。1回の分析は数十秒〜数分かかります。完了までページを閉じないでください。
+          本日の実行: {props.todayCount}{props.cfg.dailyLimit == null ? '' : ` / ${props.cfg.dailyLimit}`} 回{props.cfg.dailyLimit == null ? '(回数の上限なし)' : ''}。1回の分析は数十秒〜数分かかります。完了までページを閉じないでください。
         </p>
       </section>
       <h2>最近のレポート</h2>

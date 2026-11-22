@@ -55,6 +55,9 @@ app.use('*', async (c, next) => {
   h.set('X-Frame-Options', 'DENY')
   h.set('Cache-Control', 'no-store')
   h.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  h.set('Cross-Origin-Opener-Policy', 'same-origin')
+  h.set('Cross-Origin-Resource-Policy', 'same-origin')
 })
 
 // 認証: 静的アセット・API・ページのすべてが対象(run_worker_first により Worker を必ず経由する)
@@ -70,6 +73,9 @@ app.get('/assets/*', async (c) => {
  * Worker がキーを付けて取得して返す(キーはブラウザに出ない)。保存済みの分析で使った文書IDのみ対象。
  */
 app.get('/documents/:docId/pdf', async (c) => {
+  // 他サイトの画像タグ等から呼ばれて、データ提供元の無料枠を消費させられないよう、同一サイトからの操作に限る
+  const site = c.req.header('Sec-Fetch-Site')
+  if (site && !['same-origin', 'none'].includes(site)) return c.text('Forbidden', 403)
   const doc = await runs.findStoredDocument(c.env.DB, c.req.param('docId'))
   if (!doc || !doc.pdfUrl) return c.text('Not Found', 404)
   if (!c.env.IRBANK_API_KEY) return c.text('PDFの取得にはIRBANK_API_KEYの設定が必要です', 503)
