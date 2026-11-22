@@ -9,6 +9,11 @@ import * as runs from './db/repositories/runs.ts'
 import { Dashboard, type RunInsight } from './pages/dashboard.tsx'
 import { ReportsPage, StocksPage } from './pages/lists.tsx'
 import { StockDetail } from './pages/stock-detail.tsx'
+import { DataOnlyPage } from './pages/data-only.tsx'
+import { collect } from './services/analysis/collect.ts'
+import { buildSnapshot } from './services/analysis/snapshot.ts'
+import { makeProvider } from './services/analysis/orchestrate.ts'
+import { AnalysisError } from './services/analysis/errors.ts'
 import { ReportDetail, type ReportData } from './pages/report-detail.tsx'
 import { SECTION_TYPES } from '../shared/types.ts'
 import { isUuid, normalizeStockCode } from '../shared/validate.ts'
@@ -147,6 +152,35 @@ app.get('/stocks/:code', async (c) => {
   const latestRun = latest ? await runs.getRun(c.env.DB, latest.id) : null
   const documents = parseDocuments(latestRun?.sourceMetadataJson ?? null)
   return c.html(<StockDetail documents={documents} code={code} stock={stock} runs={list} insights={insights} latestOverall={overall} latestRunId={latest?.id ?? null} cfg={cfg} />)
+})
+
+/**
+ * 主要データだけの表示(AI分析なし・保存なし)。OpenAIへは送らず、DBにも書かない。
+ * 開くたびにデータ提供元のリクエストを約10回使うため、他サイトからの呼び出しは拒否する。
+ */
+app.get('/data/:code', async (c) => {
+  const site = c.req.header('Sec-Fetch-Site')
+  if (site && !['same-origin', 'none'].includes(site)) return c.text('Forbidden', 403)
+  const code = normalizeStockCode(c.req.param('code'))
+  if (!code) return c.html(<NotFound />, 404)
+  const cfg = loadConfig(c.env)
+  try {
+    const snapshot = buildSnapshot(await collect(makeProvider(c.env, cfg), code, { light: true }))
+    return c.html(<DataOnlyPage snapshot={snapshot} mock={cfg.dataSource === 'mock'} />)
+  } catch (e) {
+    const msg = e instanceof AnalysisError ? e.message : 'データを取得できませんでした'
+    console.warn('data-only failed', e instanceof AnalysisError ? e.code : 'unknown')
+    return c.html(
+      <Layout title="データを取得できません">
+        <h1>データを取得できませんでした</h1>
+        <p class="error">{msg}</p>
+        <p>
+          <a href="/">ホームへ戻る</a>
+        </p>
+      </Layout>,
+      e instanceof AnalysisError && e.code === 'stock_not_found' ? 404 : 502,
+    )
+  }
 })
 
 app.get('/reports/:id', async (c) => {

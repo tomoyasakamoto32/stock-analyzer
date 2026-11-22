@@ -50,7 +50,13 @@ function reason(e: unknown): string {
   return e instanceof ProviderError ? `${e.message}` : e instanceof Error ? e.message : '不明なエラー'
 }
 
-export async function collect(provider: MarketDataProvider, code: string): Promise<Collected> {
+/**
+ * light=true は「データのみ表示」用。AIへ渡さない主要データの表示に不要な項目
+ * (セグメント・開示文書の本文・大株主・日証金)を取得しない(IRBANKのリクエストを節約する)。
+ */
+export async function collect(provider: MarketDataProvider, code: string, opts: { light?: boolean } = {}): Promise<Collected> {
+  const skip = <T,>(): Promise<Dataset<T>> => Promise.resolve(null as unknown as Dataset<T>)
+  const light = opts.light === true
   const sources: SourceMeta[] = []
   const missing: string[] = []
   const defs: Record<string, string> = {}
@@ -76,13 +82,13 @@ export async function collect(provider: MarketDataProvider, code: string): Promi
       () => provider.getValuations(code),
       () => (security.edinetCode ? provider.getDividends(security.edinetCode) : Promise.reject(new Error('EDINETコード不明'))),
       () => provider.getWeeklyMargin(code),
-      () => provider.getJsfMargin(code),
-      () => (security.edinetCode ? provider.getShareholders(security.edinetCode) : Promise.reject(new Error('EDINETコード不明'))),
+      () => (light ? skip() : provider.getJsfMargin(code)),
+      () => (light ? skip() : security.edinetCode ? provider.getShareholders(security.edinetCode) : Promise.reject(new Error('EDINETコード不明'))),
       () => provider.getIndicators(code),
       () => provider.getForecast(code),
-      () => (security.edinetCode ? provider.getSegments(security.edinetCode, 'annual') : Promise.reject(new Error('EDINETコード不明'))),
-      () => (security.edinetCode ? provider.getSegments(security.edinetCode, 'quarter') : Promise.reject(new Error('EDINETコード不明'))),
-      () => provider.getNarratives(code),
+      () => (light ? skip() : security.edinetCode ? provider.getSegments(security.edinetCode, 'annual') : Promise.reject(new Error('EDINETコード不明'))),
+      () => (light ? skip() : security.edinetCode ? provider.getSegments(security.edinetCode, 'quarter') : Promise.reject(new Error('EDINETコード不明'))),
+      () => (light ? skip() : provider.getNarratives(code)),
     ],
     3,
   )
@@ -110,7 +116,7 @@ export async function collect(provider: MarketDataProvider, code: string): Promi
   if (bars.length < 200) missing.push(`日足が${bars.length}件のためSMA200は算出不可`)
 
   const opt = <T>(r: PromiseSettledResult<Dataset<T>>, label: string): T | null => {
-    if (r.status === 'fulfilled') return keep(r.value)
+    if (r.status === 'fulfilled') return r.value ? keep(r.value) : null // null は取得を省略した項目(軽量モード)
     missing.push(`${label}: 取得できませんでした(${reason(r.reason)})`)
     return null
   }

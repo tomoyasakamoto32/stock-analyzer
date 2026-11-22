@@ -37,6 +37,9 @@ export function StockDetail(props: {
           <p class="muted">読み込み中…(JavaScriptが必要です)</p>
         </div>
         <p class="muted small">再分析は新しいレポートとして保存されます(過去分は上書きされません)。</p>
+        <p class="small">
+          <a href={`/data/${props.code}`}>AI分析なしで、主要データと利回り別株価だけを見る →</a>
+        </p>
       </section>
       {props.latestOverall && props.latestRunId && (
         <section class="card">

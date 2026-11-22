@@ -94,6 +94,16 @@ export function AnalysisControls(props: { fixedCode?: string; defaultStyle?: Inv
     }
   }
 
+  // AI分析なしで主要データだけを見る(選択した銘柄・入力した銘柄コードで /data/:code へ移動)
+  function showDataOnly() {
+    const { code: normalized, reason } = props.fixedCode ? { code: props.fixedCode, reason: null } : resolveCode(text, selected, suggestions)
+    if (!normalized) {
+      setError(reason ?? '銘柄を特定できません')
+      return
+    }
+    location.href = `/data/${normalized}`
+  }
+
   const busy = phase !== 'idle'
   return (
     <form onSubmit={submit} class="controls" aria-busy={busy}>
@@ -135,6 +145,9 @@ export function AnalysisControls(props: { fixedCode?: string; defaultStyle?: Inv
       )}
       <button type="submit" disabled={busy}>
         {props.fixedCode ? '再分析する' : '分析を開始'}
+      </button>
+      <button type="button" class="secondary" disabled={busy} onClick={showDataOnly}>
+        データのみ表示(AI分析なし)
       </button>
       {error && (
         <p class="error" role="alert">

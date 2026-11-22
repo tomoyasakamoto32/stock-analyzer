@@ -272,3 +272,30 @@ test('プロンプト: 分割エントリー(段階・配分・利回り/PER根�
   for (const k of ['entries', 'allocationPct', '合計をちょうど100', 'ref.price_at_per_fc', 'val.yield_price_fc', '浅い(高い)順'])
     assert.ok(SYSTEM_PROMPT.includes(k), k)
 })
+
+test('データのみ表示(軽量取得): 不要な取得を省き、主要データと利回り別株価に必要な項目はそろう', async () => {
+  const calls: string[] = []
+  const spy = new Proxy(mock, {
+    get(t, k, r) {
+      const v = Reflect.get(t, k, r)
+      return typeof v === 'function' && typeof k === 'string' && k.startsWith('get') ? (...a: unknown[]) => (calls.push(k), (v as (...x: unknown[]) => unknown).apply(t, a)) : v
+    },
+  })
+  const c = await collect(spy, '7203', { light: true })
+  for (const skipped of ['getSegments', 'getNarratives', 'getShareholders', 'getJsfMargin']) assert.ok(!calls.includes(skipped), `${skipped} は呼ばない`)
+  for (const used of ['getSecurity', 'getPrices', 'getFinancials', 'getIndicators', 'getValuations', 'getDividends', 'getWeeklyMargin', 'getForecast']) assert.ok(calls.includes(used), `${used} は呼ぶ`)
+  assert.deepEqual([c.segmentsAnnual, c.segmentsQuarter, c.narratives, c.jsf, c.shareholders], [null, null, null, null, null])
+  assert.ok(!c.missing.some((m) => /セグメント|開示書類|日証金|大量保有/.test(m)), '省略した項目を「取得失敗」として扱わない')
+  const s = buildSnapshot(c)
+  // 主要データ(KeyMetrics)・利回り別株価に必要なevidenceがそろっている
+  const k = `fin.${c.financials.annual.at(-1)!.fiscalYear.replace('/', '-')}`
+  for (const id of ['price.close', 'mcap', 'val.per', 'val.per_forecast', 'val.pbr', 'val.dividend_yield', 'val.dividend_yield_forecast', 'val.eps', 'val.bps', 'val.dps', 'fc.eps', 'fc.dps', 'val.per_5y_avg', `${k}.sales`, `${k}.roe`, `${k}.equity_ratio`, 'sd.margin_ratio', 'tech.rsi14', 'tech.sma200'])
+    assert.ok(get(s, id), id)
+  assert.equal(s.yieldPrices.length, 5)
+  assert.equal(s.yieldPricesForecast!.length, 5)
+  assert.equal(s.evidence.filter((e) => e.id.startsWith('nar.') || e.id.startsWith('seg.')).length, 0)
+  // 通常の取得(light なし)は全項目を呼ぶ
+  calls.length = 0
+  await collect(spy, '7203')
+  for (const used of ['getSegments', 'getNarratives', 'getShareholders', 'getJsfMargin']) assert.ok(calls.includes(used), `${used}(通常)`)
+})

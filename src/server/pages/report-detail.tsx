@@ -64,7 +64,7 @@ function dpsOf(rows: YieldPrice[]): number | null {
   return r && r.price != null ? Math.round(((r.price * r.targetYieldPct) / 100) * 100) / 100 : null
 }
 
-function YieldTable(props: { actual: YieldPrice[]; forecast: YieldPrice[]; close: number | null }) {
+export function YieldTable(props: { actual: YieldPrice[]; forecast: YieldPrice[]; close: number | null }) {
   const { actual, forecast, close } = props
   if (actual.length === 0 && forecast.length === 0) return null
   const targets = (forecast.length > 0 ? forecast : actual).map((y) => y.targetYieldPct)
@@ -224,7 +224,7 @@ function MetricCell(props: { e: Evidence | undefined; label: string }) {
 }
 
 /** 分析に使った主要データ。レポートの信憑性を判断できるよう最上部に出す */
-function KeyMetrics(props: { snapshot: Snapshot }) {
+export function KeyMetrics(props: { snapshot: Snapshot }) {
   const ev = new Map(props.snapshot.evidence.map((e) => [e.id, e]))
   const period = ev.get('val.eps')?.period ?? null
   const k = period ? `fin.${period.replace('/', '-')}` : null
