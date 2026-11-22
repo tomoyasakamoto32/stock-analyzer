@@ -10,16 +10,18 @@
     "test": "node --test tests/",
     "db:migrate:local": "wrangler d1 migrations apply stock-analyzer-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply stock-analyzer-db --remote",
-    "poc": "node scripts/poc.mjs"
+    "poc": "node scripts/poc.mjs",
+    "audit": "npm audit --omit=dev && npm audit",
+    "ci": "npm ci && npm run typecheck && npm test"
   },
   "dependencies": {
-    "hono": "^4.13.16"
+    "hono": "4.13.20"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261121.1",
-    "@types/node": "^26.6.6",
-    "esbuild": "^0.28.2",
-    "typescript": "^7.0.2",
-    "wrangler": "^4.110.0"
+    "@cloudflare/workers-types": "5.20261121.1",
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "wrangler": "4.166.0"
   }
 }
