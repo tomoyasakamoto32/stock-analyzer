@@ -1,38 +1,33 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "stock-analyzer",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-11-22"
-  // "compatibility_flags": [
-  //   "nodejs_compat"
-  // ],
-  // "vars": {
-  //   "MY_VAR": "my-variable"
-  // },
-  // "kv_namespaces": [
-  //   {
-  //     "binding": "MY_KV_NAMESPACE",
-  //     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  //   }
-  // ],
-  // "r2_buckets": [
-  //   {
-  //     "binding": "MY_BUCKET",
-  //     "bucket_name": "my-bucket"
-  //   }
-  // ],
-  // "d1_databases": [
-  //   {
-  //     "binding": "MY_DB",
-  //     "database_name": "my-database",
-  //     "database_id": ""
-  //   }
-  // ],
-  // "ai": {
-  //   "binding": "AI"
-  // },
-  // "observability": {
-  //   "enabled": true,
-  //   "head_sampling_rate": 1
-  // }
+  "main": "src/server/index.tsx",
+  "tsconfig": "./tsconfig.server.json",
+  "compatibility_date": "2026-11-22",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stock-analyzer-db",
+      "database_id": "215df1d6-e0aa-42ad-875c-daef51d23963",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // 静的アセットは Worker 経由(認証後)でのみ配信する。公開直配信させない。
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  // 秘密情報は入れない。IRBANK_API_KEY / OPENAI_API_KEY / OPENAI_MODEL /
+  // CLOUDFLARE_ACCESS_* / OWNER_EMAIL は `wrangler secret put` か .dev.vars で設定する。
+  "vars": {
+    "DATA_SOURCE": "mock",
+    "ALLOW_EXTERNAL_AI_DATA": "false",
+    "ALLOW_PERSIST_SOURCE_DATA": "false",
+    "DAILY_ANALYSIS_LIMIT": "5",
+    "OPENAI_MAX_OUTPUT_TOKENS": "8000",
+    "MAX_INPUT_CHARS": "90000",
+    "ALLOW_WEB_SEARCH": "false"
+  }
 }

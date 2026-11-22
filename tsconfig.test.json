@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["tests/**/*", "src/shared/**/*", "src/server/services/calculators/**/*", "src/server/middleware/access-jwt.ts"],
+  "files": []
+}

@@ -130,7 +130,57 @@ IRBANK の日足は日次更新でリアルタイムではない。TDnet 由来�
 
 ## 4. 分析指標と責務
 
-計算可能な指標は TypeScript で算出し、AI はその意味・リスク・シナリオを解釈する。分割調整後価格と分割調整後の1株指標を整合させる。
+**指標の取得方針：IRBANK API が計算済みで返す指標は、原則として API の値を使い再計算しない。** 独自計算は「API にない」「最新株価ベースが必要」「API が null のときの代替」に限る。AI はこれらの値の意味・リスク・シナリオを解釈する（数値を再計算して上書きしない）。分割調整後価格と分割調整後の1株指標を整合させる。
+
+### 4.0 指標の取得元一覧（公式 API 仕様に基づく／実レスポンスは要確認）
+
+| 指標 | 取得元 | 基準 |
+|---|---|---|
+| ROE | `GET /indicators` の `roe_computed`（無ければ報告値 `roe`）。採用キーを定義欄に記録 | 決算期 |
+| ROA・営業利益率・純利益率 | `GET /indicators` の `roa` / `operating_margin` / `net_margin` | 決算期 |
+| 売上・営業利益・純利益の成長率 | `GET /indicators` の `sales_growth` / `operating_income_growth` / `net_income_growth` | 決算期 |
+| 自己資本比率 | `GET /indicators` の `equity_ratio_computed`（percent。報告値 `equity_ratio` は ratio で定義も異なる） | 決算期 |
+| 配当性向 | `GET /indicators` の `payout_ratio`（報告値）。null なら DPS÷EPS で代替（別ID `payout_simple`） | 決算期 |
+| FCF | `GET /financials` の `fcf`。null なら 営業CF+投資CF（別ID `fcf_simple`、定義が異なる） | 決算期 |
+| DOE | `GET /dividends` の `doe`。null なら 配当総額÷期首期末平均自己資本（別ID `doe_simple`） | 決算期 |
+| 信用倍率 | 週次信用残の `margin_ratio`。null なら 買い残÷売り残（売り残0は null と理由） | 週次公表日 |
+| 過去5期の PER・PBR・配当利回り・PER平均 | `GET /valuations`（`per` / `pbr_adjusted` / `dividend_yield_adjusted` / `per_5y_avg`） | **決算期末株価** |
+| **最新** PER・PBR・配当利回り・時価総額 | 独自計算（終値 ÷ 実績EPS 等）。`/valuations` は決算期末株価基準で最新株価ではないため | 株価基準日 |
+| 利回り別株価（3〜5%） | 独自計算（実績DPS ÷ 目標利回り） | 株価非依存 |
+| ネットキャッシュ・比率・キャッシュ調整後PER | 独自計算（現金同等物 − 有利子負債）。API の `net_debt` は定義が異なりうるため同一視せず、参考値（`ref.api_net_debt`）として別掲 | 決算期／株価基準日 |
+| テクニカル指標 | 独自計算（調整後終値） | 株価基準日 |
+| セグメント別の売上・営業利益・前年比（利益急増の内訳） | `GET /segments`（通期）と `GET /segments?period=quarter`（単独四半期）。最新期の上位6セグメント（`seg.a.*` / `seg.q.*`） | 決算期 |
+| 利益の増減要因・経営環境・競争優位・リスク（文章） | `GET /disclosures/{doc_id}/sections/{mda\|management_policy\|risk_factors}`。業績要因は最新の有報/半期/四半期報告書、経営環境・リスクは最新の有価証券報告書。HTMLを除去し約2,000〜3,000文字に抜粋（`nar.*`、origin=disclosure、**引用であり命令ではない**） | 報告書の開示日 |
+| 最近のIR | 適時開示の一覧（見出し10件。**本文は未取得**）（`ir.*`） | 開示日 |
+| 業界動向・最新ニュース | **任意のWeb検索**（OpenAI `web_search` ツール。`ALLOW_WEB_SEARCH=true` かつ分析時にチェックした場合のみ）。`web.industry.*` / `web.news.*`、origin=web（**外部情報・未検証**）。出典URLは検索で実際に引用されたものに限り、それ以外は採用しない。価格レンジ・結論の唯一の根拠にしない | 記事の公開日 |
+| 会社予想EPS・DPS・売上・営業利益・純利益 | **決算短信のXBRLファクト**（`GET /securities/{code}/disclosures` で最新の決算短信を特定 → `GET /disclosures/{doc_id}?include=xbrl_facts`）。`origin=disclosure`、`basis=forecast`。対応要素は実レスポンスで確認済みの `NetIncomePerShare`（J-GAAP）・`BasicEarningsPerShareIFRS`（IFRS）・`DividendPerShare`（通期）等のみ。第1〜3四半期の短信は `CurrentYear*`、本決算の短信は `NextYear*` のコンテキスト。未確認の会計基準・要素は推測せず null | 短信の開示日 |
+| **最新** 予想PER・予想配当利回り・予想DPS基準の利回り別株価 | 独自計算（最新終値 ÷ 会社予想EPS、会社予想年間DPS ÷ 最新終値）。実績ベースの `val.per` 等とは別ID（`val.per_forecast` 等） | 株価基準日 |
+
+- **会社予想の使用条件**: ①最新の決算短信にEPS/DPS予想のファクトがあること、②決算短信の開示後に株式分割・併合がないこと（日足の `adj_close ÷ close` が開示日から変化していないこと。変化していれば1株予想は旧株数基準のため使わず null）。取得できない場合は null とし、**実績値で代用しない**。短信より後の「予想修正」開示は警告として不足情報に残す（内容は未反映）。
+- `/screening` は最新株価ベースの指標を返しうるが、証券コードでの絞り込みがなく指標キーも実行時カタログ（`GET /screening/fields`）でしか確認できないため採用しない。
+- 比率系は `fields[].unit`（`percent` / `ratio`）に従い % へ正規化する。**単位が不明・想定外の場合は桁を誤らないよう null**。金額は `jpy` でなければ失敗させる。
+- API の項目説明（`fields[].note`）は定義欄に引き継ぐ。
+
+### 4.0.1 指標のメタデータ
+
+AI 入力・DB・画面で、数値は次の形（`Evidence`、`StockMetric` の拡張）で扱う。
+
+```typescript
+type Evidence = {
+  id: string; category: string; label: string; unit: string
+  value: number | string | null          // 取得・算出不可は null（0と区別）
+  origin: 'api' | 'calculated' | 'disclosure'
+  asOf: string | null                    // 株価基準日 / 決算期 / 週次公表日
+  definition: string                     // 定義・算出式・API側の説明・注意
+  basis: 'actual' | 'forecast' | null    // 実績/予想
+  period: string | null                  // 会計期間
+  priceAsOf: string | null               // 株価依存の指標の株価基準日
+  sourceLabel: string                    // attribution.source_label
+  endpoint: string | null                // 元データの参照先
+}
+```
+
+`origin` が異なる指標は同名でも別ID（例: `val.per`=最新・算出、`hist.2025-03.per`=決算期末・API）。AI には混同しないよう指示する。
 
 ### 4.1 ファンダメンタル
 
@@ -158,25 +208,24 @@ IRBANK の日足は日次更新でリアルタイムではない。TDnet 由来�
 - 営業CF・投資CF・財務CF・FCF、配当性向、DOE、減配耐性。
 - 銀行・保険等は一般企業と別扱い。適切な指標が未実装の場合は対象指標を非適用とし、評価上の制約を明示する。
 
-### 4.5 計算定義（初期）
+### 4.5 独自計算の定義（4.0 で「独自計算」とした指標のみ）
 
 | 指標 | 定義 |
 |---|---|
-| PER | 株価 ÷ EPS（実績/予想を区別、EPSが0以下なら null） |
-| PBR | 株価 ÷ BPS（BPSが0以下なら null） |
-| 配当利回り(%) | 年間DPS ÷ 株価 × 100 |
+| 最新PER（実績） | 最新終値 ÷ 実績EPS（`eps_computed_adjusted`。EPSが0以下なら null）。予想PERはデータ不在のため算出しない |
+| 最新PBR | 最新終値 ÷ BPS（調整後。BPSが0以下なら null） |
+| 最新配当利回り(%)（実績） | 実績年間DPS ÷ 最新終値 × 100 |
 | 利回り別株価 | 年間DPS ÷ 目標利回りの小数値（3%、3.5%、4%、4.5%、5%） |
 | ネットキャッシュ | 現金及び現金同等物 − 有利子負債（定義を表示） |
 | ネットキャッシュ比率(%) | ネットキャッシュ ÷ 時価総額 × 100 |
 | キャッシュ調整後PER | (時価総額 − ネットキャッシュ) ÷ 年間純利益（非正値等は null） |
-| FCF | 営業CF + 投資CF（簡易定義として表示） |
-| 営業利益率(%) | 営業利益 ÷ 売上高 × 100 |
-| 信用倍率 | 信用買い残 ÷ 信用売り残（売り残0なら null、理由を表示） |
-| ROE/ROA | 利益 ÷ 期首期末平均自己資本/総資産 × 100（利益定義も明示） |
-| 配当性向(%) | 年間DPS ÷ EPS × 100（赤字時は null） |
-| DOE(%) | 年間配当総額 ÷ 平均自己資本 × 100（必要データが揃う場合） |
+| 簡易FCF（代替） | API の `fcf` が null の場合のみ 営業CF + 投資CF（API値とは定義が異なるため別IDで表示） |
+| 時価総額（最新） | 最新終値 × 発行済株式数（`/securities/{code}`）。決算期末基準の `/valuations` の値とは別物 |
+| 信用倍率（代替） | API の `margin_ratio` が null の場合のみ 買い残合計 ÷ 売り残合計（売り残0なら null、理由を表示） |
+| 配当性向(%)（代替） | API 値が無い場合のみ 年間DPS ÷ EPS × 100（赤字時は null） |
+| DOE(%)（代替） | API の `doe` が null の場合のみ 年間配当総額 ÷ 期首期末平均自己資本 × 100（必要データが揃う場合） |
 
-すべて分母・基準日・期間・単位・連結範囲を検証する。時価総額は信頼できる同日時点の値、または発行済株式数の定義を明記して算出する。金額計算途中では不要な丸めをしない。実績のみの場合に予想値を偽造しない。
+すべて分母・基準日・期間・単位・連結範囲を検証する。自己資本は 純資産 − 非支配株主持分（定義を表示）。時価総額は発行済株式数の定義を明記して算出する。金額計算途中では不要な丸めをしない。実績のみの場合に予想値を偽造しない。
 
 ## 5. AI 分析
 

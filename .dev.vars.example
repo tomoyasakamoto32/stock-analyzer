@@ -1,0 +1,24 @@
+# コピーして .dev.vars を作る（.dev.vars は .gitignore 済み）
+IRBANK_API_KEY=
+OPENAI_API_KEY=
+OPENAI_MODEL=
+CLOUDFLARE_ACCESS_TEAM_DOMAIN=
+CLOUDFLARE_ACCESS_AUD=
+OWNER_EMAIL=
+# irbank | mock（mock は固定のダミーデータ。APIキー不要）
+DATA_SOURCE=mock
+# true の時のみ OpenAI へ送信する。IRBANK 利用条件の確認後に有効化
+ALLOW_EXTERNAL_AI_DATA=false
+# true の時のみ正規化済みスナップショットをD1へ保存する
+ALLOW_PERSIST_SOURCE_DATA=false
+# true の時のみ、分析時の任意オプション「Web検索」を使える(OpenAIのweb_searchツール。追加費用・外部情報)
+ALLOW_WEB_SEARCH=false
+# 決算短信PDFをAIで要約して分析に加える(既定true。実AIモードのみ。費用が増えるため止めたい場合はfalse)
+ENABLE_TANSHIN_PDF=true
+# ローカル専用: true で Access JWT 検証を省略（localhost の時のみ有効）
+DEV_AUTH_BYPASS=false
+# 任意: 費用上限・単価(USD / 100万トークン)
+DAILY_ANALYSIS_LIMIT=5
+MONTHLY_COST_LIMIT_USD=
+OPENAI_PRICE_INPUT_PER_MTOK=
+OPENAI_PRICE_OUTPUT_PER_MTOK=
